@@ -1,0 +1,26 @@
+# Ignore the configuration file
+config.ini
+
+# Ignore environment variable files
+.env
+
+# Ignore Python compiled files
+*.pyc
+__pycache__/
+
+# Ignore IDE-specific files and directories
+.vscode/
+.idea/
+
+# Ignore log files
+*.log
+
+# Ignore virtual environment directories
+venv/
+env/
+
+# Ignore sensitive data files
+sensitive_data.txt
+
+# Ignore specific directories
+sensitive_directory/
