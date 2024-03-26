@@ -3,6 +3,20 @@ from datetime import datetime
 import requests
 import json
 import configparser
+import matplotlib.pyplot as plt
+
+
+def get_credentials():
+    config = configparser.ConfigParser()
+    config.read("config.ini")  # Make sure config.ini is in the same directory
+
+    email = config.get("OTF", "email")
+    password = config.get("OTF", "password")
+
+    if not email or not password:
+        raise ValueError("OTF credentials not found in config.ini.")
+
+    return email, password
 
 
 # Simplified token retrieval
@@ -48,7 +62,6 @@ def get_workout_summary(workouts_data, token):
     average_hr_total = 0
     average_splats_total = 0
     average_calories_total = 0
-
     for workout in workouts_data:
         data_class_counter += 1
         count = 1
@@ -65,18 +78,15 @@ def get_workout_summary(workouts_data, token):
                 else:
                     min_count[count] = 1
                 count += 1
-
         secs_in_zone["Red"] += workout["redZoneTimeSecond"]
         secs_in_zone["Orange"] += workout["orangeZoneTimeSecond"]
         secs_in_zone["Green"] += workout["greenZoneTimeSecond"]
         secs_in_zone["Blue"] += workout["blueZoneTimeSecond"]
         secs_in_zone["Black"] += workout["blackZoneTimeSecond"]
-
         max_hr_average_total += workout["maxHr"]
         average_hr_total += workout["avgHr"]
         average_splats_total += workout["totalSplatPoints"]
         average_calories_total += workout["totalCalories"]
-
     return {
         "hr_totals": hr_totals,
         "min_count": min_count,
@@ -89,10 +99,10 @@ def get_workout_summary(workouts_data, token):
     }
 
 
-# Process and analyze workouts
-def process_workouts(data, token):
+# Process and analyze workouts (with date range filtering)
+def process_workouts(data, token, start_date=None, end_date=None):
     class_type_counter = defaultdict(int)
-    classes_by_coach = defaultdict(int)
+    classes_by_coach_and_studio = defaultdict(int)
     classes_by_location = defaultdict(int)
     workouts_2024 = []
     total_workouts = 0
@@ -108,38 +118,42 @@ def process_workouts(data, token):
         "Max Splat Points": {"value": 0, "date": ""},
     }
 
-    for item in data:
-        class_date_str = item["classDate"]
-        formatted_date = format_date(class_date_str)
+    for workout in data:
+        class_date_str = workout["classDate"]
         class_date = datetime.strptime(class_date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-        if class_date.year == 2024:
-            workouts_2024.append(item)
-            total_workouts += 1
-            class_type_counter[item.get("classType", "No Class Type Found")] += 1
-            coach = item.get("coach", "No Coach")
-            studio_name = item.get("studioName", "No Studio")
-            classes_by_coach[f"{coach} - {studio_name}"] += 1
-            classes_by_location[studio_name] += 1
+        formatted_date = class_date.strftime(
+            "%Y-%m-%d"
+        )  # Now use strftime on the datetime object
 
-            class_history_uuid = item["classHistoryUuId"]
-            member_uuid = item["memberUuId"]
+        # Check if within date range (if provided)
+        if start_date and class_date < start_date:
+            continue
+        if end_date and class_date > end_date:
+            continue
+
+        if class_date.year == 2024:
+            workouts_2024.append(workout)
+            total_workouts += 1
+            class_type_counter[workout.get("classType", "No Class Type Found")] += 1
+            coach = workout.get("coach", "No Coach")
+            studio_name = workout.get("studioName", "No Studio")
+            classes_by_coach_and_studio[f"{coach} - {studio_name}"] += 1
+            classes_by_location[studio_name] += 1
+            class_history_uuid = workout["classHistoryUuId"]
+            member_uuid = workout["memberUuId"]
             detailed_data = get_detailed_workout_data(
                 class_history_uuid, member_uuid, token
             )
-
             treadmill_data = detailed_data.get("TreadmillData", {})
             heart_rate_data = detailed_data.get("HeartRateData", {})
-
             distance = treadmill_data.get("TotalDistance", {}).get("Value", 0.0)
             current_max_speed = treadmill_data.get("MaxSpeed", {}).get("Value", 0.0)
             calories = heart_rate_data.get("Calories", 0)
             splat_points = heart_rate_data.get("SplatPoint", 0)
-
             total_distance += distance
             max_speed = max(max_speed, current_max_speed)
             total_calories += calories
             total_splat_points += splat_points
-
             if distance > personal_bests["Max Distance"]["value"]:
                 personal_bests["Max Distance"]["value"] = distance
                 personal_bests["Max Distance"]["date"] = formatted_date
@@ -152,15 +166,13 @@ def process_workouts(data, token):
             if splat_points > personal_bests["Max Splat Points"]["value"]:
                 personal_bests["Max Splat Points"]["value"] = splat_points
                 personal_bests["Max Splat Points"]["date"] = formatted_date
-
     current_date = datetime.now()
     days_elapsed = (current_date - start_of_year).days + 1
     workout_percentage = (total_workouts / days_elapsed) * 100
     workout_summary = get_workout_summary(workouts_2024, token)
-
     return (
         class_type_counter,
-        classes_by_coach,
+        classes_by_coach_and_studio,
         classes_by_location,
         workouts_2024,
         total_distance,
@@ -184,7 +196,7 @@ def process_workouts(data, token):
 
 def print_workout_stats(
     class_type_counter,
-    classes_by_coach,
+    classes_by_coach_and_studio,
     classes_by_location,
     workouts_2024,
     total_distance,
@@ -210,78 +222,83 @@ def print_workout_stats(
     print(f"Total number of days so far in 2024: {days_elapsed}")
     print(f"Percentage of workouts attended in 2024: {workout_percentage:.2f}")
     print("----------------------\n")
-
     print("Classes by type in 2024:")
     for class_type, count in class_type_counter.items():
         print(f"{class_type}: {count}")
     print("----------------------\n")
-
-    print("Classes by coach in 2024:")
-    for coach, count in classes_by_coach.items():
-        print(f"{coach}: {count}")
+    print("Classes by coach and studio in 2024:")
+    for coach_studio, count in classes_by_coach_and_studio.items():
+        print(f"{coach_studio}: {count}")
     print("----------------------\n")
-
     print("Classes by location in 2024:")
     for location, count in classes_by_location.items():
         print(f"{location}: {count}")
     print("----------------------\n")
-
-    print("Classes by type in 2024:")
-    for class_type, count in class_type_counter.items():
-        print(f"{class_type}: {count}")
-    print("----------------------\n")
-
     print(f"2024 Totals:")
     print(f"Total Distance: {total_distance:.2f} miles")
-    print(f"Total Calories Burned: {total_calories}")
+    print(f"Total Calories Burned: {total_calories:,.0f}")
     print(f"Total Splat Points: {total_splat_points}")
     print("----------------------\n")
-
     print("Personal Bests:")
     for metric, record in personal_bests.items():
         value = record["value"]
         date = record["date"]
         print(f"{metric}: {value} (on {date})")
     print("----------------------\n")
-
     print(
         f"The remainder of the data is based on workout summaries available for 2024. You have {data_class_counter} workouts with data available in 2024."
     )
     if data_class_counter > 0:
-        print(f"Average Max HR in 2024: {max_hr_average_total / data_class_counter}")
-        print(f"Average HR in 2024: {average_hr_total / data_class_counter}")
-        print(f"Average Splats in 2024: {average_splats_total / data_class_counter}")
         print(
-            f"Average calorie burn in 2024: {average_calories_total / data_class_counter}"
+            f"Average Max HR in 2024: {max_hr_average_total / data_class_counter:.0f}"
+        )
+        print(f"Average HR in 2024: {average_hr_total / data_class_counter:.0f}")
+        print(
+            f"Average Splats in 2024: {average_splats_total / data_class_counter:.0f}"
+        )
+        print(
+            f"Average calorie burn in 2024: {average_calories_total / data_class_counter:.0f}"
         )
         print("----------------------\n")
-
         print("Average HR by Min in 2024:")
         for minute in range(1, max(hr_totals.keys()) + 1):
             if minute in hr_totals:
                 average_hr = hr_totals[minute] / min_count[minute]
-                print(f"{minute}: {average_hr}")
+                print(f"{minute}: {average_hr:.0f}")
         print("----------------------\n")
-
         print("Average time in each zone (Mins) in 2024:")
         for zone, seconds in secs_in_zone.items():
-            print(f"{zone}: {seconds / data_class_counter / 60}")
+            print(f"{zone}: {seconds / data_class_counter / 60:.2f}")
         print("----------------------\n")
+
+        # Plot average HR by minute
+        plt.plot(
+            hr_totals.keys(), [hr_totals[min] / min_count[min] for min in hr_totals]
+        )
+        plt.xlabel("Minute")
+        plt.ylabel("Average Heart Rate")
+        plt.title("Average HR by Minute in 2024")
+        plt.show()
     else:
         print("No workout summaries available for 2024.")
 
 
 # Main function to drive the program
 def main():
-    config = configparser.ConfigParser()
-    config.read("config.ini")
-    email = config.get("OTF", "email")
-    password = config.get("OTF", "password")
+    email, password = get_credentials()
     token = get_token(email, password)
-
     response_data = get_in_studio_response(token)
     if "data" in response_data:
-        processed_data = process_workouts(response_data["data"], token)
+        # Example usage with filtering:
+        start_date = datetime(2024, 3, 1)
+        end_date = datetime(2024, 3, 31)
+        processed_data = process_workouts(
+            response_data["data"], token, start_date, end_date
+        )
+
+        # Or, without filtering:
+        # processed_data = process_workouts(response_data["data"], token)
+
         print_workout_stats(*processed_data)
     else:
         print("No data found.")
