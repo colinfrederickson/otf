@@ -99,8 +99,8 @@ def get_workout_summary(workouts_data, token):
     }
 
 
-# Process and analyze workouts (with date range filtering)
-def process_workouts(data, token, start_date=None, end_date=None):
+# Process and analyze workouts
+def process_workouts(data, token):
     class_type_counter = defaultdict(int)
     classes_by_coach_and_studio = defaultdict(int)
     classes_by_location = defaultdict(int)
@@ -120,16 +120,12 @@ def process_workouts(data, token, start_date=None, end_date=None):
 
     for workout in data:
         class_date_str = workout["classDate"]
-        class_date = datetime.strptime(class_date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+        class_date = datetime.strptime(
+            class_date_str, "%Y-%m-%dT%H:%M:%S.%fZ"
+        )  # Convert to datetime object
         formatted_date = class_date.strftime(
             "%Y-%m-%d"
         )  # Now use strftime on the datetime object
-
-        # Check if within date range (if provided)
-        if start_date and class_date < start_date:
-            continue
-        if end_date and class_date > end_date:
-            continue
 
         if class_date.year == 2024:
             workouts_2024.append(workout)
@@ -154,6 +150,10 @@ def process_workouts(data, token, start_date=None, end_date=None):
             max_speed = max(max_speed, current_max_speed)
             total_calories += calories
             total_splat_points += splat_points
+
+            # Format the date here, inside the loop
+            formatted_date = class_date.strftime("%Y-%m-%d")
+
             if distance > personal_bests["Max Distance"]["value"]:
                 personal_bests["Max Distance"]["value"] = distance
                 personal_bests["Max Distance"]["date"] = formatted_date
@@ -264,23 +264,33 @@ def print_workout_stats(
         for minute in range(1, max(hr_totals.keys()) + 1):
             if minute in hr_totals:
                 average_hr = hr_totals[minute] / min_count[minute]
-                print(f"{minute}: {average_hr:.0f}")
+                print(f"{minute}: {average_hr:.2f}")
         print("----------------------\n")
         print("Average time in each zone (Mins) in 2024:")
         for zone, seconds in secs_in_zone.items():
             print(f"{zone}: {seconds / data_class_counter / 60:.2f}")
         print("----------------------\n")
-
-        # Plot average HR by minute
-        plt.plot(
-            hr_totals.keys(), [hr_totals[min] / min_count[min] for min in hr_totals]
-        )
-        plt.xlabel("Minute")
-        plt.ylabel("Average Heart Rate")
-        plt.title("Average HR by Minute in 2024")
-        plt.show()
     else:
         print("No workout summaries available for 2024.")
+
+    # Plot average HR by minute (with enhancements)
+    plt.figure(figsize=(10, 6))
+    plt.plot(
+        hr_totals.keys(),
+        [hr_totals[min] / min_count[min] for min in hr_totals],
+        label="Average HR",
+    )
+    plt.xlabel("Minute")
+    plt.ylabel("Average Heart Rate")
+    plt.title("Average HR by Minute in 2024")
+    plt.grid(True)
+    plt.legend()
+
+    # Ensure there's data to plot before showing the chart
+    if hr_totals:  # Check if hr_totals is not empty
+        plt.show()
+    else:
+        print("No heart rate data available for plotting.")
 
 
 # Main function to drive the program
@@ -289,16 +299,7 @@ def main():
     token = get_token(email, password)
     response_data = get_in_studio_response(token)
     if "data" in response_data:
-        # Example usage with filtering:
-        start_date = datetime(2024, 3, 1)
-        end_date = datetime(2024, 3, 31)
-        processed_data = process_workouts(
-            response_data["data"], token, start_date, end_date
-        )
-
-        # Or, without filtering:
-        # processed_data = process_workouts(response_data["data"], token)
-
+        processed_data = process_workouts(response_data["data"], token)
         print_workout_stats(*processed_data)
     else:
         print("No data found.")
