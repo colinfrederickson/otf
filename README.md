@@ -5,33 +5,37 @@ A Python utility for retrieving and analyzing workout data from your OrangeTheor
 ## Features
 
 - Retrieves workout data from the OrangeTheory Fitness API.
-- Provides a comprehensive analysis of your workout history, focusing on the year 2024.
+- Provides a comprehensive analysis of your workout history, focusing on the year 2024 (can be modified for other years).
 - Displays workout statistics, including:
   - Total workouts and percentage of workouts attended.
   - Breakdown of classes by type, coach, and location.
   - Personal bests for maximum speed, distance, calories, and splat points.
   - Average heart rate, time spent in each heart rate zone, and calorie burn.
-  - Detailed heart rate analysis by minute.
+  - Detailed heart rate analysis by minute (with rounded values and thousands separators).
+- Generates a plot of average heart rate by minute.
 
 ## Prerequisites
 
 - Python 3.x
 - `requests` library
+- `matplotlib` library (for visualization)
 
 ## Installation
 
 1. Clone the repository:
-git clone https://github.com/your-username/otf-workout-analysis.git
 
+   ```bash
+   git clone https://github.com/your-username/otf-workout-analysis.git
+
+   ```
 
 2. Install the required dependencies:
-pip3 install requests
-
+   pip3 install requests
 
 3. Create a `config.ini` file in the project directory with the following content:
-[OTF]
-email = your-email@example.com
-password = your-password
+   [OTF]
+   email = your-email@example.com
+   password = your-password
 
 Replace `your-email@example.com` with your OrangeTheory Fitness email and `your-password` with your account password.
 
@@ -51,6 +55,7 @@ The script will display the following information:
 - Personal bests for maximum speed, distance, calories, and splat points.
 - Average heart rate, time spent in each heart rate zone, and calorie burn.
 - Detailed heart rate analysis by minute.
+- A plot of average heart rate by minute (if heart rate data is available).
 
 ## Limitations
 
