@@ -99,14 +99,12 @@ def get_workout_summary(workouts_data, token):
     }
 
 
-# Process and analyze workouts
-def process_workouts(data, token):
+def process_workouts(data, token, start_date=None, end_date=None):
     class_type_counter = defaultdict(int)
     classes_by_coach_and_studio = defaultdict(int)
     classes_by_location = defaultdict(int)
-    workouts_2024 = []
+    workouts_filtered = []
     total_workouts = 0
-    start_of_year = datetime(2024, 1, 1)
     total_distance = 0.0
     max_speed = 0.0
     total_calories = 0
@@ -120,15 +118,12 @@ def process_workouts(data, token):
 
     for workout in data:
         class_date_str = workout["classDate"]
-        class_date = datetime.strptime(
-            class_date_str, "%Y-%m-%dT%H:%M:%S.%fZ"
-        )  # Convert to datetime object
-        formatted_date = class_date.strftime(
-            "%Y-%m-%d"
-        )  # Now use strftime on the datetime object
+        class_date = datetime.strptime(class_date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
 
-        if class_date.year == 2024:
-            workouts_2024.append(workout)
+        if (start_date is None or class_date >= start_date) and (
+            end_date is None or class_date <= end_date
+        ):
+            workouts_filtered.append(workout)
             total_workouts += 1
             class_type_counter[workout.get("classType", "No Class Type Found")] += 1
             coach = workout.get("coach", "No Coach")
@@ -151,7 +146,6 @@ def process_workouts(data, token):
             total_calories += calories
             total_splat_points += splat_points
 
-            # Format the date here, inside the loop
             formatted_date = class_date.strftime("%Y-%m-%d")
 
             if distance > personal_bests["Max Distance"]["value"]:
@@ -166,15 +160,17 @@ def process_workouts(data, token):
             if splat_points > personal_bests["Max Splat Points"]["value"]:
                 personal_bests["Max Splat Points"]["value"] = splat_points
                 personal_bests["Max Splat Points"]["date"] = formatted_date
+
     current_date = datetime.now()
-    days_elapsed = (current_date - start_of_year).days + 1
-    workout_percentage = (total_workouts / days_elapsed) * 100
-    workout_summary = get_workout_summary(workouts_2024, token)
+    days_elapsed = (current_date - start_date).days + 1 if start_date else None
+    workout_percentage = (total_workouts / days_elapsed) * 100 if days_elapsed else None
+    workout_summary = get_workout_summary(workouts_filtered, token)
+
     return (
         class_type_counter,
         classes_by_coach_and_studio,
         classes_by_location,
-        workouts_2024,
+        workouts_filtered,
         total_distance,
         max_speed,
         total_calories,
@@ -198,7 +194,7 @@ def print_workout_stats(
     class_type_counter,
     classes_by_coach_and_studio,
     classes_by_location,
-    workouts_2024,
+    workouts_filtered,
     total_distance,
     max_speed,
     total_calories,
@@ -217,24 +213,31 @@ def print_workout_stats(
     average_calories_total,
 ):
     print("----------------------\n")
-    print("Workouts in 2024:")
-    print(f"Total workouts in 2024: {total_workouts}")
-    print(f"Total number of days so far in 2024: {days_elapsed}")
-    print(f"Percentage of workouts attended in 2024: {workout_percentage:.2f}")
+    print("Workouts in the selected date range:")
+    print(f"Total workouts: {total_workouts}")
+
+    if days_elapsed:
+        print(f"Total number of days in the selected date range: {days_elapsed}")
+        print(f"Percentage of workouts attended: {workout_percentage:.2f}")
+    else:
+        print(
+            "Total number of days and workout percentage not available for the selected date range."
+        )
+
     print("----------------------\n")
-    print("Classes by type in 2024:")
+    print("Classes by type in the selected date range:")
     for class_type, count in class_type_counter.items():
         print(f"{class_type}: {count}")
     print("----------------------\n")
-    print("Classes by coach and studio in 2024:")
+    print("Classes by coach and studio in the selected date range:")
     for coach_studio, count in classes_by_coach_and_studio.items():
         print(f"{coach_studio}: {count}")
     print("----------------------\n")
-    print("Classes by location in 2024:")
+    print("Classes by location in the selected date range:")
     for location, count in classes_by_location.items():
         print(f"{location}: {count}")
     print("----------------------\n")
-    print(f"2024 Totals:")
+    print(f"Totals for the selected date range:")
     print(f"Total Distance: {total_distance:.2f} miles")
     print(f"Total Calories Burned: {total_calories:,.0f}")
     print(f"Total Splat Points: {total_splat_points}")
@@ -246,32 +249,28 @@ def print_workout_stats(
         print(f"{metric}: {value} (on {date})")
     print("----------------------\n")
     print(
-        f"The remainder of the data is based on workout summaries available for 2024. You have {data_class_counter} workouts with data available in 2024."
+        f"The remainder of the data is based on workout summaries available for the selected date range. You have {data_class_counter} workouts with data available."
     )
     if data_class_counter > 0:
+        print(f"Average Max HR: {max_hr_average_total / data_class_counter:.0f}")
+        print(f"Average HR: {average_hr_total / data_class_counter:.0f}")
+        print(f"Average Splats: {average_splats_total / data_class_counter:.0f}")
         print(
-            f"Average Max HR in 2024: {max_hr_average_total / data_class_counter:.0f}"
-        )
-        print(f"Average HR in 2024: {average_hr_total / data_class_counter:.0f}")
-        print(
-            f"Average Splats in 2024: {average_splats_total / data_class_counter:.0f}"
-        )
-        print(
-            f"Average calorie burn in 2024: {average_calories_total / data_class_counter:.0f}"
+            f"Average calorie burn: {average_calories_total / data_class_counter:.0f}"
         )
         print("----------------------\n")
-        print("Average HR by Min in 2024:")
+        print("Average HR by Min:")
         for minute in range(1, max(hr_totals.keys()) + 1):
             if minute in hr_totals:
                 average_hr = hr_totals[minute] / min_count[minute]
                 print(f"{minute}: {average_hr:.2f}")
         print("----------------------\n")
-        print("Average time in each zone (Mins) in 2024:")
+        print("Average time in each zone (Mins):")
         for zone, seconds in secs_in_zone.items():
             print(f"{zone}: {seconds / data_class_counter / 60:.2f}")
         print("----------------------\n")
     else:
-        print("No workout summaries available for 2024.")
+        print("No workout summaries available for the selected date range.")
 
     # Plot average HR by minute (with enhancements)
     plt.figure(figsize=(10, 6))
@@ -282,12 +281,11 @@ def print_workout_stats(
     )
     plt.xlabel("Minute")
     plt.ylabel("Average Heart Rate")
-    plt.title("Average HR by Minute in 2024")
+    plt.title("Average HR by Minute")
     plt.grid(True)
     plt.legend()
 
-    # Ensure there's data to plot before showing the chart
-    if hr_totals:  # Check if hr_totals is not empty
+    if hr_totals:
         plt.show()
     else:
         print("No heart rate data available for plotting.")
@@ -298,8 +296,17 @@ def main():
     email, password = get_credentials()
     token = get_token(email, password)
     response_data = get_in_studio_response(token)
+
     if "data" in response_data:
-        processed_data = process_workouts(response_data["data"], token)
+        year_input = input("Enter a year (YYYY) or leave blank for all classes: ")
+        if year_input:
+            start_date = datetime(int(year_input), 1, 1)
+            end_date = datetime(int(year_input), 12, 31)
+            processed_data = process_workouts(
+                response_data["data"], token, start_date, end_date
+            )
+        else:
+            processed_data = process_workouts(response_data["data"], token)
         print_workout_stats(*processed_data)
     else:
         print("No data found.")
