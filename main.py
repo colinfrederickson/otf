@@ -1,316 +1,329 @@
-from collections import defaultdict
-from datetime import datetime
-import requests
-import json
+import asyncio
 import configparser
+from otf_api import Otf
+from datetime import datetime, timedelta
+import pandas as pd
 import matplotlib.pyplot as plt
+import calendar
 
 
-def get_credentials():
+class OTFAnalytics:
+    def __init__(self, email, password):
+        self.email = email
+        self.password = password
+        self.otf = Otf(email, password)
+
+    async def get_workout_data(self, limit=100):
+        """Get detailed workout data"""
+        summaries = await self.otf.get_performance_summaries(limit=limit)
+        return summaries.summaries
+
+    def analyze_frequency(self, workouts):
+        """Analyze workout frequency patterns"""
+        dates = [datetime.fromisoformat(w.otf_class.starts_at_local) for w in workouts]
+        df = pd.DataFrame({"date": dates})
+        df["year"] = df["date"].dt.year
+        df["month"] = df["date"].dt.month
+        df["day"] = df["date"].dt.day
+        df["weekday"] = df["date"].dt.strftime("%A")
+
+        # Classes per year
+        classes_per_year = df.groupby("year").size()
+
+        # Classes per month per year
+        classes_per_month = df.groupby(["year", "month"]).size().unstack(fill_value=0)
+        classes_per_month.columns = [
+            calendar.month_abbr[m] for m in classes_per_month.columns
+        ]
+
+        # Average classes per week
+        weekly_classes = df.resample("W", on="date").size().mean()
+
+        return {
+            "classes_per_year": classes_per_year,
+            "classes_per_month": classes_per_month,
+            "avg_weekly_classes": weekly_classes,
+        }
+
+    async def analyze_performance(self, workouts):
+        """Analyze detailed performance metrics"""
+        performance_data = []
+
+        for workout in workouts:
+            date = datetime.fromisoformat(workout.otf_class.starts_at_local)
+            detail = await self.otf.get_performance_summary(workout.id)
+
+            # Base workout data
+            workout_data = {
+                "date": date,
+                "weekday": date.strftime("%A"),
+                "time": date.strftime("%H:%M"),
+                "calories": workout.details.calories_burned,
+                "splat_points": workout.details.splat_points,
+                "type": workout.otf_class.name,
+                "studio": (
+                    workout.otf_class.studio.name
+                    if hasattr(workout.otf_class.studio, "name")
+                    else "Unknown"
+                ),
+                "coach": (
+                    workout.otf_class.coach.name
+                    if hasattr(workout.otf_class.coach, "name")
+                    else "Unknown"
+                ),
+            }
+
+            # Add heart rate zones
+            if hasattr(workout.details, "zone_time_minutes"):
+                zones = workout.details.zone_time_minutes
+                workout_data.update(
+                    {
+                        "red_zone": getattr(zones, "red", 0),
+                        "orange_zone": getattr(zones, "orange", 0),
+                        "green_zone": getattr(zones, "green", 0),
+                        "blue_zone": getattr(zones, "blue", 0),
+                        "gray_zone": getattr(zones, "gray", 0),
+                    }
+                )
+            else:
+                workout_data.update(
+                    {
+                        "red_zone": 0,
+                        "orange_zone": 0,
+                        "green_zone": 0,
+                        "blue_zone": 0,
+                        "gray_zone": 0,
+                    }
+                )
+
+            # Add equipment data
+            workout_data.update(
+                {
+                    "tread_distance": 0.0,
+                    "max_speed": 0.0,
+                    "avg_speed": 0.0,
+                    "rower_distance": 0.0,
+                }
+            )
+
+            if hasattr(detail.details, "equipment_data"):
+                equip = detail.details.equipment_data
+
+                # Treadmill data
+                if hasattr(equip, "treadmill"):
+                    tread = equip.treadmill
+                    if hasattr(tread, "total_distance"):
+                        workout_data["tread_distance"] = float(
+                            tread.total_distance.display_value
+                        )
+                    if hasattr(tread, "max_speed"):
+                        workout_data["max_speed"] = float(tread.max_speed.display_value)
+                    if hasattr(tread, "avg_speed"):
+                        workout_data["avg_speed"] = float(tread.avg_speed.display_value)
+
+                # Rower data
+                if hasattr(equip, "rower"):
+                    rower = equip.rower
+                    if hasattr(rower, "total_distance"):
+                        workout_data["rower_distance"] = float(
+                            rower.total_distance.display_value
+                        )
+
+            performance_data.append(workout_data)
+
+        return pd.DataFrame(performance_data)
+
+    def generate_visualizations(self, freq_data, perf_df):
+        """Generate comprehensive visualizations"""
+        # Set plot style
+        plt.style.use("default")
+        colors = ["#f58220", "#1e88e5", "#43a047", "#e53935", "#5e35b1"]
+
+        # 1. Yearly Overview
+        plt.figure(figsize=(12, 6))
+        freq_data["classes_per_year"].plot(kind="bar", color=colors[0])
+        plt.title("Classes per Year", fontsize=14, pad=20)
+        plt.xlabel("Year")
+        plt.ylabel("Number of Classes")
+        plt.grid(True, axis="y", alpha=0.3)
+        plt.tight_layout()
+        plt.savefig("yearly_overview.png")
+        plt.close()
+
+        # 2. Monthly Patterns
+        plt.figure(figsize=(15, 7))
+        freq_data["classes_per_month"].plot(kind="bar", stacked=False)
+        plt.title("Classes per Month by Year", fontsize=14, pad=20)
+        plt.xlabel("Year")
+        plt.ylabel("Number of Classes")
+        plt.legend(title="Month", bbox_to_anchor=(1.05, 1), loc="upper left")
+        plt.grid(True, axis="y", alpha=0.3)
+        plt.tight_layout()
+        plt.savefig("monthly_patterns.png")
+        plt.close()
+
+        # 3. Performance Dashboard
+        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+        fig.suptitle("Performance Dashboard", fontsize=16, y=0.95)
+
+        # Splat Points and Calories
+        perf_df.plot(x="date", y=["splat_points", "calories"], ax=axes[0, 0])
+        axes[0, 0].set_title("Splat Points and Calories")
+        axes[0, 0].grid(True, alpha=0.3)
+        axes[0, 0].set_xlabel("Date")
+
+        # Zone Distribution
+        zone_cols = ["red_zone", "orange_zone", "green_zone", "blue_zone", "gray_zone"]
+        zone_avgs = perf_df[zone_cols].mean()
+        axes[0, 1].pie(zone_avgs, labels=zone_cols, colors=colors, autopct="%1.1f%%")
+        axes[0, 1].set_title("Average Time in Zones")
+
+        # Distance Trends
+        perf_df.plot(x="date", y="tread_distance", ax=axes[1, 0], color=colors[2])
+        axes[1, 0].set_title("Treadmill Distance")
+        axes[1, 0].grid(True, alpha=0.3)
+        axes[1, 0].set_xlabel("Date")
+        axes[1, 0].set_ylabel("Miles")
+
+        # Speed Progress
+        perf_df.plot(x="date", y=["max_speed", "avg_speed"], ax=axes[1, 1])
+        axes[1, 1].set_title("Speed Progression")
+        axes[1, 1].grid(True, alpha=0.3)
+        axes[1, 1].set_xlabel("Date")
+        axes[1, 1].set_ylabel("MPH")
+
+        plt.tight_layout()
+        plt.savefig("performance_dashboard.png")
+        plt.close()
+
+        # 4. Day of Week Analysis
+        plt.figure(figsize=(12, 6))
+        day_stats = perf_df.groupby("weekday").agg(
+            {"splat_points": "mean", "calories": "mean", "tread_distance": "mean"}
+        )
+        # Reorder days
+        day_order = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+        ]
+        day_stats = day_stats.reindex(day_order)
+
+        # Scale calories to fit on same plot
+        day_stats["calories"] = day_stats["calories"] / 10
+
+        day_stats.plot(kind="bar", width=0.8)
+        plt.title("Performance by Day of Week", fontsize=14, pad=20)
+        plt.xlabel("Day")
+        plt.ylabel("Value")
+        plt.legend(["Splat Points", "Calories (÷10)", "Distance (miles)"])
+        plt.grid(True, axis="y", alpha=0.3)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.savefig("day_of_week_analysis.png")
+        plt.close()
+
+    def print_insights(self, freq_data, perf_df):
+        """Print detailed insights from the data"""
+        print("\n=== OTF Workout Analysis ===")
+
+        print("\nFrequency Insights:")
+        print(f"Total Classes Analyzed: {len(perf_df)}")
+        print(f"Average Weekly Classes: {freq_data['avg_weekly_classes']:.1f}")
+
+        print("\nYearly Class Totals:")
+        for year, classes in freq_data["classes_per_year"].items():
+            print(f"{year}: {classes} classes")
+
+        print("\nMonthly Averages:")
+        monthly_avg = freq_data["classes_per_month"].mean()
+        best_month = monthly_avg.idxmax()
+        print(
+            f"Most Active Month: {best_month} (avg: {monthly_avg[best_month]:.1f} classes)"
+        )
+
+        print("\nPerformance Insights:")
+        print(f"Average Splat Points: {perf_df['splat_points'].mean():.1f}")
+        print(f"Average Calories: {perf_df['calories'].mean():.1f}")
+        print(
+            f"Average Treadmill Distance: {perf_df['tread_distance'].mean():.2f} miles"
+        )
+
+        print("\nPersonal Records:")
+        print(f"Most Splat Points: {perf_df['splat_points'].max():.0f}")
+        print(f"Highest Calorie Burn: {perf_df['calories'].max():.0f}")
+        print(
+            f"Longest Treadmill Distance: {perf_df['tread_distance'].max():.2f} miles"
+        )
+        print(f"Fastest Speed: {perf_df['max_speed'].max():.1f} mph")
+
+        # Best performing days
+        weekday_stats = perf_df.groupby("weekday").agg(
+            {"splat_points": "mean", "calories": "mean", "tread_distance": "mean"}
+        )
+        print("\nBest Performing Days:")
+        best_splat_day = weekday_stats["splat_points"].idxmax()
+        best_calorie_day = weekday_stats["calories"].idxmax()
+        best_distance_day = weekday_stats["tread_distance"].idxmax()
+        print(
+            f"Most Splat Points: {best_splat_day} ({weekday_stats.loc[best_splat_day, 'splat_points']:.1f})"
+        )
+        print(
+            f"Highest Calories: {best_calorie_day} ({weekday_stats.loc[best_calorie_day, 'calories']:.1f})"
+        )
+        print(
+            f"Best Distance: {best_distance_day} ({weekday_stats.loc[best_distance_day, 'tread_distance']:.2f} miles)"
+        )
+
+        # Studio comparison
+        print("\nStudio Performance:")
+        studio_stats = perf_df.groupby("studio").agg(
+            {"splat_points": "mean", "calories": "mean", "tread_distance": "mean"}
+        )
+        for studio in studio_stats.index:
+            print(f"\n{studio}:")
+            print(f"  Avg Splats: {studio_stats.loc[studio, 'splat_points']:.1f}")
+            print(f"  Avg Calories: {studio_stats.loc[studio, 'calories']:.1f}")
+            print(
+                f"  Avg Distance: {studio_stats.loc[studio, 'tread_distance']:.2f} miles"
+            )
+
+
+async def main():
     config = configparser.ConfigParser()
-    config.read("config.ini")  # Make sure config.ini is in the same directory
+    config.read("config.ini")
 
     email = config.get("OTF", "email")
     password = config.get("OTF", "password")
 
-    if not email or not password:
-        raise ValueError("OTF credentials not found in config.ini.")
+    print(f"Initializing analysis for: {email}")
+    analytics = OTFAnalytics(email, password)
 
-    return email, password
+    try:
+        print("Fetching workout data...")
+        workouts = await analytics.get_workout_data(limit=100)
 
+        print("Analyzing patterns...")
+        freq_data = analytics.analyze_frequency(workouts)
+        perf_df = await analytics.analyze_performance(workouts)
 
-# Simplified token retrieval
-def get_token(email, password):
-    header = '{"Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth"}'
-    body = f'{{"AuthParameters": {{"USERNAME": "{email}", "PASSWORD": "{password}"}}, "AuthFlow": "USER_PASSWORD_AUTH", "ClientId": "65knvqta6p37efc2l3eh26pl5o"}}'
-    response = requests.post(
-        "https://cognito-idp.us-east-1.amazonaws.com/",
-        headers=json.loads(header),
-        json=json.loads(body),
-    )
-    return json.loads(response.content)["AuthenticationResult"]["IdToken"]
+        print("Generating insights and visualizations...")
+        analytics.print_insights(freq_data, perf_df)
+        analytics.generate_visualizations(freq_data, perf_df)
 
+        print("\nVisualization files generated:")
+        print("- yearly_overview.png")
+        print("- monthly_patterns.png")
+        print("- performance_dashboard.png")
+        print("- day_of_week_analysis.png")
 
-# Retrieve the list of workouts
-def get_in_studio_response(token):
-    endpoint = "https://api.orangetheory.co/virtual-class/in-studio-workouts"
-    header = {"Content-Type": "application/json", "Authorization": token}
-    return requests.get(endpoint, headers=header).json()
-
-
-# Retrieve detailed workout data
-def get_detailed_workout_data(class_history_uuid, member_uuid, token):
-    endpoint = "https://performance.orangetheory.co/v2.4/member/workout/summary"
-    headers = {"Content-Type": "application/json", "Authorization": token}
-    payload = {"ClassHistoryUUId": class_history_uuid, "MemberUUId": member_uuid}
-    response = requests.post(endpoint, headers=headers, json=payload)
-    return response.json()
-
-
-# Format Date to YYYY_MM_DD
-def format_date(date_str):
-    date_obj = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-    return date_obj.strftime("%Y-%m-%d")
-
-
-def get_workout_summary(workouts_data, token):
-    hr_totals = {}
-    min_count = {}
-    secs_in_zone = {"Red": 0, "Orange": 0, "Green": 0, "Blue": 0, "Black": 0}
-    data_class_counter = 0
-    max_hr_average_total = 0
-    average_hr_total = 0
-    average_splats_total = 0
-    average_calories_total = 0
-    for workout in workouts_data:
-        data_class_counter += 1
-        count = 1
-        if "minuteByMinuteHr" in workout and workout["minuteByMinuteHr"] is not None:
-            for hr in (
-                workout["minuteByMinuteHr"].split("[")[1].split("]")[0].split(",")
-            ):
-                if count in hr_totals:
-                    hr_totals[count] = int(hr_totals[count]) + int(hr)
-                else:
-                    hr_totals[count] = int(hr)
-                if count in min_count:
-                    min_count[count] = min_count[count] + 1
-                else:
-                    min_count[count] = 1
-                count += 1
-        secs_in_zone["Red"] += workout["redZoneTimeSecond"]
-        secs_in_zone["Orange"] += workout["orangeZoneTimeSecond"]
-        secs_in_zone["Green"] += workout["greenZoneTimeSecond"]
-        secs_in_zone["Blue"] += workout["blueZoneTimeSecond"]
-        secs_in_zone["Black"] += workout["blackZoneTimeSecond"]
-        max_hr_average_total += workout["maxHr"]
-        average_hr_total += workout["avgHr"]
-        average_splats_total += workout["totalSplatPoints"]
-        average_calories_total += workout["totalCalories"]
-    return {
-        "hr_totals": hr_totals,
-        "min_count": min_count,
-        "secs_in_zone": secs_in_zone,
-        "data_class_counter": data_class_counter,
-        "max_hr_average_total": max_hr_average_total,
-        "average_hr_total": average_hr_total,
-        "average_splats_total": average_splats_total,
-        "average_calories_total": average_calories_total,
-    }
-
-
-def process_workouts(data, token, start_date=None, end_date=None):
-    class_type_counter = defaultdict(int)
-    classes_by_coach_and_studio = defaultdict(int)
-    classes_by_location = defaultdict(int)
-    workouts_filtered = []
-    total_workouts = 0
-    total_distance = 0.0
-    max_speed = 0.0
-    total_calories = 0
-    total_splat_points = 0
-    personal_bests = {
-        "Max Speed": {"value": 0, "date": ""},
-        "Max Distance": {"value": 0, "date": ""},
-        "Max Calories": {"value": 0, "date": ""},
-        "Max Splat Points": {"value": 0, "date": ""},
-    }
-
-    for workout in data:
-        class_date_str = workout["classDate"]
-        class_date = datetime.strptime(class_date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-
-        if (start_date is None or class_date >= start_date) and (
-            end_date is None or class_date <= end_date
-        ):
-            workouts_filtered.append(workout)
-            total_workouts += 1
-            class_type_counter[workout.get("classType", "No Class Type Found")] += 1
-            coach = workout.get("coach", "No Coach")
-            studio_name = workout.get("studioName", "No Studio")
-            classes_by_coach_and_studio[f"{coach} - {studio_name}"] += 1
-            classes_by_location[studio_name] += 1
-            class_history_uuid = workout["classHistoryUuId"]
-            member_uuid = workout["memberUuId"]
-            detailed_data = get_detailed_workout_data(
-                class_history_uuid, member_uuid, token
-            )
-            treadmill_data = detailed_data.get("TreadmillData", {})
-            heart_rate_data = detailed_data.get("HeartRateData", {})
-            distance = treadmill_data.get("TotalDistance", {}).get("Value", 0.0)
-            current_max_speed = treadmill_data.get("MaxSpeed", {}).get("Value", 0.0)
-            calories = heart_rate_data.get("Calories", 0)
-            splat_points = heart_rate_data.get("SplatPoint", 0)
-            total_distance += distance
-            max_speed = max(max_speed, current_max_speed)
-            total_calories += calories
-            total_splat_points += splat_points
-
-            formatted_date = class_date.strftime("%Y-%m-%d")
-
-            if distance > personal_bests["Max Distance"]["value"]:
-                personal_bests["Max Distance"]["value"] = distance
-                personal_bests["Max Distance"]["date"] = formatted_date
-            if current_max_speed > personal_bests["Max Speed"]["value"]:
-                personal_bests["Max Speed"]["value"] = current_max_speed
-                personal_bests["Max Speed"]["date"] = formatted_date
-            if calories > personal_bests["Max Calories"]["value"]:
-                personal_bests["Max Calories"]["value"] = calories
-                personal_bests["Max Calories"]["date"] = formatted_date
-            if splat_points > personal_bests["Max Splat Points"]["value"]:
-                personal_bests["Max Splat Points"]["value"] = splat_points
-                personal_bests["Max Splat Points"]["date"] = formatted_date
-
-    current_date = datetime.now()
-    days_elapsed = (current_date - start_date).days + 1 if start_date else None
-    workout_percentage = (total_workouts / days_elapsed) * 100 if days_elapsed else None
-    workout_summary = get_workout_summary(workouts_filtered, token)
-
-    return (
-        class_type_counter,
-        classes_by_coach_and_studio,
-        classes_by_location,
-        workouts_filtered,
-        total_distance,
-        max_speed,
-        total_calories,
-        total_splat_points,
-        personal_bests,
-        total_workouts,
-        days_elapsed,
-        workout_percentage,
-        workout_summary["hr_totals"],
-        workout_summary["min_count"],
-        workout_summary["secs_in_zone"],
-        workout_summary["data_class_counter"],
-        workout_summary["max_hr_average_total"],
-        workout_summary["average_hr_total"],
-        workout_summary["average_splats_total"],
-        workout_summary["average_calories_total"],
-    )
-
-
-def print_workout_stats(
-    class_type_counter,
-    classes_by_coach_and_studio,
-    classes_by_location,
-    workouts_filtered,
-    total_distance,
-    max_speed,
-    total_calories,
-    total_splat_points,
-    personal_bests,
-    total_workouts,
-    days_elapsed,
-    workout_percentage,
-    hr_totals,
-    min_count,
-    secs_in_zone,
-    data_class_counter,
-    max_hr_average_total,
-    average_hr_total,
-    average_splats_total,
-    average_calories_total,
-):
-    print("----------------------\n")
-    print("Workouts in the selected date range:")
-    print(f"Total workouts: {total_workouts}")
-
-    if days_elapsed:
-        print(f"Total number of days in the selected date range: {days_elapsed}")
-        print(f"Percentage of workouts attended: {workout_percentage:.2f}")
-    else:
-        print(
-            "Total number of days and workout percentage not available for the selected date range."
-        )
-
-    print("----------------------\n")
-    print("Classes by type in the selected date range:")
-    for class_type, count in class_type_counter.items():
-        print(f"{class_type}: {count}")
-    print("----------------------\n")
-    print("Classes by coach and studio in the selected date range:")
-    for coach_studio, count in classes_by_coach_and_studio.items():
-        print(f"{coach_studio}: {count}")
-    print("----------------------\n")
-    print("Classes by location in the selected date range:")
-    for location, count in classes_by_location.items():
-        print(f"{location}: {count}")
-    print("----------------------\n")
-    print(f"Totals for the selected date range:")
-    print(f"Total Distance: {total_distance:.2f} miles")
-    print(f"Total Calories Burned: {total_calories:,.0f}")
-    print(f"Total Splat Points: {total_splat_points}")
-    print("----------------------\n")
-    print("Personal Bests:")
-    for metric, record in personal_bests.items():
-        value = record["value"]
-        date = record["date"]
-        print(f"{metric}: {value} (on {date})")
-    print("----------------------\n")
-    print(
-        f"The remainder of the data is based on workout summaries available for the selected date range. You have {data_class_counter} workouts with data available."
-    )
-    if data_class_counter > 0:
-        print(f"Average Max HR: {max_hr_average_total / data_class_counter:.0f}")
-        print(f"Average HR: {average_hr_total / data_class_counter:.0f}")
-        print(f"Average Splats: {average_splats_total / data_class_counter:.0f}")
-        print(
-            f"Average calorie burn: {average_calories_total / data_class_counter:.0f}"
-        )
-        print("----------------------\n")
-        print("Average HR by Min:")
-        for minute in range(1, max(hr_totals.keys()) + 1):
-            if minute in hr_totals:
-                average_hr = hr_totals[minute] / min_count[minute]
-                print(f"{minute}: {average_hr:.2f}")
-        print("----------------------\n")
-        print("Average time in each zone (Mins):")
-        for zone, seconds in secs_in_zone.items():
-            print(f"{zone}: {seconds / data_class_counter / 60:.2f}")
-        print("----------------------\n")
-    else:
-        print("No workout summaries available for the selected date range.")
-
-    # Plot average HR by minute (with enhancements)
-    plt.figure(figsize=(10, 6))
-    plt.plot(
-        hr_totals.keys(),
-        [hr_totals[min] / min_count[min] for min in hr_totals],
-        label="Average HR",
-    )
-    plt.xlabel("Minute")
-    plt.ylabel("Average Heart Rate")
-    plt.title("Average HR by Minute")
-    plt.grid(True)
-    plt.legend()
-
-    if hr_totals:
-        plt.show()
-    else:
-        print("No heart rate data available for plotting.")
-
-
-# Main function to drive the program
-def main():
-    email, password = get_credentials()
-    token = get_token(email, password)
-    response_data = get_in_studio_response(token)
-
-    if "data" in response_data:
-        year_input = input("Enter a year (YYYY) or leave blank for all classes: ")
-        if year_input:
-            start_date = datetime(int(year_input), 1, 1)
-            end_date = datetime(int(year_input), 12, 31)
-            processed_data = process_workouts(
-                response_data["data"], token, start_date, end_date
-            )
-        else:
-            processed_data = process_workouts(response_data["data"], token)
-        print_workout_stats(*processed_data)
-    else:
-        print("No data found.")
+    finally:
+        await analytics.otf._session.close()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

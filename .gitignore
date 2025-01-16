@@ -24,3 +24,7 @@ sensitive_data.txt
 
 # Ignore specific directories
 sensitive_directory/
+day_of_week_analysis.png
+monthly_patterns.png
+performance_dashboard.png
+yearly_overview.png
