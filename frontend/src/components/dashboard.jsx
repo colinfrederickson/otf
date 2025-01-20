@@ -3,8 +3,7 @@ import { ArrowPathIcon } from '@heroicons/react/24/outline';
 
 // Tab content components
 const OverviewTab = ({ classData, error, status }) => (
-<div className="text-center space-y-8">
-
+  <div className="text-center space-y-8">
     {/* Total Classes Card */}
     <div className="inline-block p-8 rounded-2xl bg-gradient-to-b from-slate-800/50 to-slate-900/50 
                   border border-slate-700/50 shadow-lg backdrop-blur-sm
@@ -54,6 +53,7 @@ const OverviewTab = ({ classData, error, status }) => (
     )}
   </div>
 );
+
 
 
 

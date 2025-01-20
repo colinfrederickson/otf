@@ -99,7 +99,7 @@ async def get_total_classes(token: str = Depends(oauth2_scheme)):
         )
         
         # Get both workout summaries and class data
-        workouts = await analytics.get_workout_data(limit=1000)
+        workouts = await analytics.get_workout_data(limit=None)
         class_data = await analytics.get_class_data()
         
         # Prepare response with combined data
