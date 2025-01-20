@@ -22,7 +22,7 @@ async def main():
         print(f"Initializing analysis for: {email}")
         
         print("Fetching workout data...")
-        workouts = await analytics.get_workout_data(limit=99999999)
+        workouts = await analytics.get_workout_data(limit=None)
 
         print("Analyzing patterns...")
         freq_data = analytics.analyze_frequency(workouts)

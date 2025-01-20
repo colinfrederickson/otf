@@ -1,40 +1,37 @@
 # OrangeTheory Fitness Analytics Tool
 
-A comprehensive Python utility for analyzing and visualizing workout data from your OrangeTheory Fitness account.
+A comprehensive web application for analyzing and visualizing workout data from your OrangeTheory Fitness account.
 
 ## Features
 
-- Advanced data retrieval and analysis from the OrangeTheory Fitness API
-- Comprehensive performance analytics including:
-  - Workout frequency patterns
-  - Performance trends over time
-  - Heart rate zone analysis
-  - Equipment performance tracking (treadmill, rower)
-  - Studio and coach comparisons
-  - Personal records tracking
+- **Secure Login**:
 
-### Visualizations
+  - Token-based authentication for secure access.
+  - User-specific data retrieval after login.
 
-- Yearly workout overview
-- Monthly attendance patterns
-- Performance dashboard
-- Day-of-week analysis
+- **Dashboard**:
 
-### Analytics
+  - Overview of total class attendance.
+  - Detailed performance metrics, including:
+    - In-studio and OTF Live class breakdown.
 
-- Detailed performance metrics
-- Studio-specific performance analysis
-- Time-based trending
-- Comprehensive heart rate zone analysis
-- Equipment-specific performance tracking
+- **Data Retrieval and Analysis**:
+  - Advanced data retrieval from the OrangeTheory Fitness API.
+  - Comprehensive performance analytics:
+    - Workout frequency patterns.
+    - Studio-specific attendance trends.
+    - Performance trends over time.
+
+### API Features
+
+- `/api/login`: Authenticate users and issue tokens.
+- `/api/total-classes`: Retrieve class attendance and performance data.
+- Future endpoints to expand data visualization and user analytics.
 
 ## Prerequisites
 
-- Python 3.x
-- Required packages:
-  ```bash
-  pip install otf-api pandas matplotlib configparser
-  ```
+- Node.js and npm for running the web application.
+- A modern web browser for accessing the app.
 
 ## Installation
 
@@ -44,60 +41,56 @@ A comprehensive Python utility for analyzing and visualizing workout data from y
    git clone https://github.com/your-username/otf-analytics.git
    ```
 
-2. Create a `config.ini` file:
-   ```ini
-   [OTF]
-   email = your-otf-email@example.com
-   password = your-otf-password
+2. Install dependencies:
+
+   ```bash
+   npm install
    ```
+
+3. Create a `.env` file for configuration:
+
+   ```env
+   REACT_APP_API_URL=http://localhost:5000/api
+   ```
+
+4. Start the development server:
+
+   ```bash
+   npm start
+   ```
+
+5. Set up the backend by running the Python server (API):
+   - Install the required Python packages:
+     ```bash
+     pip install fastapi uvicorn pandas requests
+     ```
+   - Start the backend server:
+     ```bash
+     uvicorn api:app --reload
+     ```
 
 ## Usage
 
-Run the analysis:
-
-```bash
-python3 main.py
-```
-
-## Output Files
-
-The script generates several visualization files:
-
-- `yearly_overview.png`
-- `monthly_patterns.png`
-- `performance_dashboard.png`
-- `day_of_week_analysis.png`
+1. Open the web app in your browser (default: `http://localhost:3000`).
+2. Log in using your OrangeTheory Fitness credentials.
+3. Access the dashboard to view:
+   - Total class attendance.
+   - Performance metrics and trends.
 
 ## Analysis Features
 
-### Frequency Analysis
+### Dashboard Overview
 
-- Classes per year
-- Monthly patterns
-- Weekly averages
-- Day-of-week trends
-
-### Performance Metrics
-
-- Splat points and calories
-- Distance and speed records
-- Heart rate zone distribution
-- Studio performance comparison
-
-### Personal Records
-
-- Speed and distance
-- Calorie burn
-- Splat points
-- Zone achievements
+- Total classes attended.
+- Breakdown of in-studio vs. OTF Live classes.
 
 ## Future Development
 
-- Enhanced benchmark tracking
-- Advanced performance analytics
-- Year-over-year comparisons
-- Workout type analysis
-- Custom performance scores
+- Integration of workout visualizations.
+- Enhanced performance trend analysis.
+- Benchmark and personal records tracking.
+- User-specific goal setting and tracking.
+- Mobile-friendly responsive design.
 
 ## Contributing
 
