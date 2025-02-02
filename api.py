@@ -1,21 +1,20 @@
-import logging
-from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
+from otf_api import Otf
+from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from pydantic import BaseModel
-from src.analyzer import OTFAnalytics
+import logging
 import os
+import asyncio
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Security configurations
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
 app = FastAPI()
 
@@ -33,15 +32,17 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
+async def get_otf_client(credentials):
+    """Create and return an OTF client"""
+    return Otf(credentials["email"], credentials["password"])
+
 def create_access_token(data: dict):
-    """Create a new access token with expiration"""
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def decode_token(token: str):
-    """Decode and validate JWT token"""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         credentials = payload.get("credentials")
@@ -53,13 +54,13 @@ def decode_token(token: str):
 
 @app.post("/api/login")
 async def login(request: LoginRequest):
-    analytics = None
+    otf = None
     try:
         logger.info(f"Login attempt for email: {request.email}")
-        analytics = OTFAnalytics(request.email, request.password)
+        otf = Otf(request.email, request.password)
         
-        # Verify credentials by attempting to get workout data
-        await analytics.get_workout_data(limit=1)
+        # Verify credentials
+        await otf.get_performance_summaries(limit=1)
         
         token_data = {
             "sub": request.email,
@@ -68,79 +69,80 @@ async def login(request: LoginRequest):
                 "password": request.password
             }
         }
-        access_token = create_access_token(token_data)
         
-        logger.info(f"Login successful for email: {request.email}")
         return {
-            "access_token": access_token,
+            "access_token": create_access_token(token_data),
             "token_type": "bearer",
             "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60
         }
     except Exception as e:
-        logger.error(f"Login failed for email {request.email}: {str(e)}")
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid credentials"
-        )
+        logger.error(f"Login failed: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid credentials")
     finally:
-        if analytics:
-            await analytics.close()
+        if otf and otf.session:
+            await otf.session.close()
 
 @app.get("/api/total-classes")
 async def get_total_classes(token: str = Depends(oauth2_scheme)):
-    analytics = None
+    otf = None
     try:
         credentials = decode_token(token)
-        logger.info(f"Fetching class data for email: {credentials['email']}")
+        otf = await get_otf_client(credentials)
         
-        analytics = OTFAnalytics(
-            credentials["email"],
-            credentials["password"]
+        # Get data in parallel
+        workouts, total_classes = await asyncio.gather(
+            otf.get_performance_summaries(limit=None),
+            otf.get_total_classes()
         )
         
-        # Get both workout summaries and class data
-        workouts = await analytics.get_workout_data(limit=None)
-        class_data = await analytics.get_class_data()
-        
-        # Prepare response with combined data
-        response = {
+        return {
             "performance_data": {
-                "retrieved_workouts": len(workouts)
+                "retrieved_workouts": len(workouts.summaries)
             },
             "total_classes": {
-                "in_studio": class_data["total_in_studio_classes"],
-                "ot_live": class_data["total_otlive_classes"],
-                "total": class_data["total_in_studio_classes"] + class_data["total_otlive_classes"]
+                "in_studio": total_classes.total_in_studio_classes_attended,
+                "ot_live": total_classes.total_otlive_classes_attended,
+                "total": total_classes.total_in_studio_classes_attended + total_classes.total_otlive_classes_attended
             },
-            "date_range": None,
-            "status": "success",
-            "message": "Data retrieved successfully"
+            "date_range": {
+                "first_class": workouts.summaries[0].otf_class.starts_at_local,
+                "last_class": workouts.summaries[-1].otf_class.starts_at_local
+            } if workouts.summaries else None,
+            "status": "success"
         }
         
-        # Add date range if workouts exist
-        if workouts:
-            response["date_range"] = {
-                "first_class": workouts[0].otf_class.starts_at_local,
-                "last_class": workouts[-1].otf_class.starts_at_local
-            }
-        
-        logger.info(f"Successfully retrieved data for {credentials['email']}")
-        return response
-        
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error retrieving class data: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="An unexpected error occurred while retrieving class data"
-        )
+        logger.error(f"Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if analytics:
-            try:
-                await analytics.close()
-            except Exception as e:
-                logger.error(f"Error closing analytics session: {str(e)}")
+        if otf and otf.session:
+            await otf.session.close()
+
+@app.get("/api/member-detail")
+async def get_member_detail(token: str = Depends(oauth2_scheme)):
+    otf = None
+    try:
+        credentials = decode_token(token)
+        otf = await get_otf_client(credentials)
+        member_detail = await otf.get_member_detail()
+        
+        return {
+            "status": "success",
+            "data": {
+                "first_name": member_detail.first_name,
+                "last_name": member_detail.last_name,
+                "user_name": member_detail.user_name,
+                "email": member_detail.email,
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if otf and otf.session:
+            await otf.session.close()
+
 
 if __name__ == "__main__":
     import uvicorn

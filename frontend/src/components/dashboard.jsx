@@ -54,15 +54,11 @@ const OverviewTab = ({ classData, error, status }) => (
   </div>
 );
 
-
-
-
 const WorkoutsTab = ({ classData }) => (
   <div className="space-y-6">
     <div className="text-slate-300 text-sm px-4 py-3 bg-slate-800/50 rounded-lg">
       Showing {classData.retrievedWorkouts} recent workouts out of {classData.total} total classes
     </div>
-    {/* Placeholder for workout list - to be implemented */}
     <div className="text-center text-slate-400">
       Workout history coming soon...
     </div>
@@ -80,6 +76,37 @@ const Dashboard = ({ onLogout }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [status, setStatus] = useState('');
+  const [memberInfo, setMemberInfo] = useState(null);
+
+  const fetchMemberInfo = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+      
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+  
+      const response = await fetch('http://localhost:8000/api/member-detail', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+  
+      if (!response.ok) {
+        throw new Error('Failed to fetch member details');
+      }
+  
+      const responseData = await response.json();
+      
+      if (responseData.status === 'success' && responseData.data) {
+        setMemberInfo(responseData.data);
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (err) {
+      console.error('Error fetching member info:', err);
+    }
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -132,12 +159,18 @@ const Dashboard = ({ onLogout }) => {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    fetchMemberInfo();
+  }, [fetchData, fetchMemberInfo]);
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'workouts', label: 'Workouts' }
   ];
+
+  const handleRefresh = () => {
+    fetchData();
+    fetchMemberInfo();
+  };
 
   return (
     <div className="min-h-screen bg-slate-900">
@@ -146,28 +179,45 @@ const Dashboard = ({ onLogout }) => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <button 
-              onClick={fetchData}
+              onClick={handleRefresh}
               className="text-xl font-bold bg-gradient-to-r from-red-500 via-orange-400 to-amber-400 text-transparent bg-clip-text tracking-tight hover:opacity-80 transition-opacity"
             >
               AFTERBURN
             </button>
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={fetchData}
-                className="p-2 text-slate-400 hover:text-white focus:outline-none transition-colors"
-                disabled={loading}
-              >
-                <ArrowPathIcon className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-              <button
-                onClick={onLogout}
-                className="px-4 py-2 text-sm font-medium text-slate-300 bg-slate-800/50 rounded-lg 
-                         hover:bg-slate-700/50 hover:text-white focus:outline-none focus:ring-2 
-                         focus:ring-orange-500/50 focus:ring-offset-2 focus:ring-offset-slate-800 
-                         transition-all duration-200 border border-slate-700/50"
-              >
-                Logout
-              </button>
+            <div className="flex items-center gap-4">
+              {memberInfo && (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-orange-500/10 to-amber-500/10 ring-1 ring-orange-500/20">
+                    <span className="text-xs font-medium text-orange-400/90">
+                      {`${memberInfo.first_name?.[0]}${memberInfo.last_name?.[0]}`}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-slate-300 leading-tight">{memberInfo.first_name}</span>
+                    <span className="text-xs text-slate-500 leading-tight">Member</span>
+                  </div>
+                </div>
+              )}
+              {/* Action buttons with consistent styling */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleRefresh}
+                  className="px-3 py-1.5 text-sm font-medium text-slate-400 bg-slate-800/50 rounded-lg 
+                           hover:bg-slate-700/50 hover:text-slate-300 focus:outline-none
+                           transition-all duration-200 border border-slate-700/50 flex items-center"
+                  disabled={loading}
+                >
+                  <ArrowPathIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+                <button
+                  onClick={onLogout}
+                  className="px-3 py-1.5 text-sm font-medium text-slate-400 bg-slate-800/50 rounded-lg 
+                           hover:bg-slate-700/50 hover:text-slate-300 focus:outline-none
+                           transition-all duration-200 border border-slate-700/50"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -176,25 +226,24 @@ const Dashboard = ({ onLogout }) => {
       {/* Main content */}
       <div className="max-w-4xl mx-auto px-4 py-12">
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-3xl shadow-2xl overflow-hidden border border-slate-700/50">
-        
-{/* Tabs */}
-<div className="flex border-b border-slate-700/50">
-  {tabs.map((tab) => (
-    <button
-      key={tab.id}
-      onClick={() => setActiveTab(tab.id)}
-      className={`px-8 py-4 text-sm font-medium relative focus:outline-none transition-colors
-                ${activeTab === tab.id 
-                  ? 'text-orange-400 bg-slate-800/50 backdrop-blur-sm' 
-                  : 'text-slate-500 hover:text-slate-400'}`}
-    >
-      {tab.label}
-      {activeTab === tab.id && (
-        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500"></div>
-      )}
-    </button>
-  ))}
-</div>
+          {/* Tabs */}
+          <div className="flex border-b border-slate-700/50">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-8 py-4 text-sm font-medium relative focus:outline-none transition-colors
+                          ${activeTab === tab.id 
+                            ? 'text-orange-400 bg-slate-800/50 backdrop-blur-sm' 
+                            : 'text-slate-500 hover:text-slate-400'}`}
+              >
+                {tab.label}
+                {activeTab === tab.id && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500"></div>
+                )}
+              </button>
+            ))}
+          </div>
           
           <div className="p-6 sm:p-10">
             {loading ? (
@@ -207,7 +256,7 @@ const Dashboard = ({ onLogout }) => {
                 <div className="text-red-400 text-sm px-6 py-4 bg-red-900/20 rounded-xl inline-block border border-red-700/50">
                   <p className="mb-3">{error}</p>
                   <button
-                    onClick={fetchData}
+                    onClick={handleRefresh}
                     className="text-orange-400 hover:text-orange-300 underline focus:outline-none"
                   >
                     Try again
