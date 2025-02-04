@@ -1,23 +1,36 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 from otf_api import Otf
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 import logging
 import os
 import asyncio
 
-logging.basicConfig(level=logging.INFO)
+# Basic setup
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
+# Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
-app = FastAPI()
+# FastAPI app setup
+app = FastAPI(
+    title="OrangeTheory Fitness API",
+    description="API for accessing OrangeTheory Fitness workout data and member information.",
+    version="1.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc"
+)
 
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -26,12 +39,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# OAuth2 scheme for token authentication
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+# Pydantic models
 class LoginRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "email": "user@example.com",
+                "password": "password123"
+            }
+        }
+
+class MemberDetail(BaseModel):
+    first_name: str
+    last_name: str
+    user_name: str
+    email: EmailStr
+
+# Helper functions
 async def get_otf_client(credentials):
     """Create and return an OTF client"""
     return Otf(credentials["email"], credentials["password"])
@@ -47,13 +77,23 @@ def decode_token(token: str):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         credentials = payload.get("credentials")
         if not credentials:
-            raise HTTPException(status_code=401, detail="Invalid token format")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token format",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         return credentials
     except JWTError:
-        raise HTTPException(status_code=401, detail="Token has expired or is invalid")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired or is invalid",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
+# API endpoints
 @app.post("/api/login")
 async def login(request: LoginRequest):
+    """Authenticate user and return access token"""
     otf = None
     try:
         logger.info(f"Login attempt for email: {request.email}")
@@ -79,11 +119,12 @@ async def login(request: LoginRequest):
         logger.error(f"Login failed: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     finally:
-        if otf and otf.session:
+        if otf and hasattr(otf, 'session') and otf.session:
             await otf.session.close()
 
 @app.get("/api/total-classes")
 async def get_total_classes(token: str = Depends(oauth2_scheme)):
+    """Get total class counts and workout history"""
     otf = None
     try:
         credentials = decode_token(token)
@@ -115,11 +156,12 @@ async def get_total_classes(token: str = Depends(oauth2_scheme)):
         logger.error(f"Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if otf and otf.session:
+        if otf and hasattr(otf, 'session') and otf.session:
             await otf.session.close()
 
 @app.get("/api/member-detail")
 async def get_member_detail(token: str = Depends(oauth2_scheme)):
+    """Get member profile information"""
     otf = None
     try:
         credentials = decode_token(token)
@@ -140,9 +182,13 @@ async def get_member_detail(token: str = Depends(oauth2_scheme)):
         logger.error(f"Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        if otf and otf.session:
+        if otf and hasattr(otf, 'session') and otf.session:
             await otf.session.close()
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy"}
 
 if __name__ == "__main__":
     import uvicorn

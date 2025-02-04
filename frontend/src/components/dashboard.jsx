@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
+import StatCard from './stats/StatCard';
 
 // Tab content components
-const OverviewTab = ({ classData, error, status }) => (
+const OverviewTab = ({ classData, error, status, memberInfo }) => (
   <div className="text-center space-y-8">
     {/* Total Classes Card */}
     <div className="inline-block p-8 rounded-2xl bg-gradient-to-b from-slate-800/50 to-slate-900/50 
@@ -67,48 +68,13 @@ const WorkoutsTab = ({ classData }) => (
 
 const Dashboard = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState('overview');
-  const [classData, setClassData] = useState({
-    total: 0,
-    inStudio: 0,
-    otLive: 0,
-    retrievedWorkouts: 0
-  });
-  const [loading, setLoading] = useState(false);
+  const [classData, setClassData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [status, setStatus] = useState('');
   const [memberInfo, setMemberInfo] = useState(null);
 
-  const fetchMemberInfo = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
-      
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
-  
-      const response = await fetch('http://localhost:8000/api/member-detail', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-  
-      if (!response.ok) {
-        throw new Error('Failed to fetch member details');
-      }
-  
-      const responseData = await response.json();
-      
-      if (responseData.status === 'success' && responseData.data) {
-        setMemberInfo(responseData.data);
-      } else {
-        throw new Error('Invalid response format');
-      }
-    } catch (err) {
-      console.error('Error fetching member info:', err);
-    }
-  }, []);
-
-  const fetchData = useCallback(async () => {
+  const fetchAllData = useCallback(async () => {
     try {
       const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
       
@@ -119,33 +85,46 @@ const Dashboard = ({ onLogout }) => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('http://localhost:8000/api/total-classes', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      // Fetch both endpoints in parallel
+      const [classResponse, memberResponse] = await Promise.all([
+        fetch('http://localhost:8000/api/total-classes', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch('http://localhost:8000/api/member-detail', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('authToken');
-          sessionStorage.removeItem('authToken');
-          onLogout?.();
-          throw new Error('Session expired. Please login again.');
-        }
-        throw new Error(data.detail || 'Failed to fetch data');
+      // Handle authentication errors
+      if (classResponse.status === 401 || memberResponse.status === 401) {
+        localStorage.removeItem('authToken');
+        sessionStorage.removeItem('authToken');
+        onLogout?.();
+        throw new Error('Session expired. Please login again.');
       }
 
-      setClassData({
-        total: data.total_classes.total,
-        inStudio: data.total_classes.in_studio,
-        otLive: data.total_classes.ot_live,
-        retrievedWorkouts: data.performance_data.retrieved_workouts
-      });
-      setStatus(data.status);
+      // Handle other errors
+      if (!classResponse.ok || !memberResponse.ok) {
+        throw new Error('Failed to fetch data');
+      }
 
-      if (data.status === 'partial_success') {
+      // Parse both responses in parallel
+      const [classData, memberData] = await Promise.all([
+        classResponse.json(),
+        memberResponse.json()
+      ]);
+
+      // Update all state at once
+      setClassData({
+        total: classData.total_classes.total,
+        inStudio: classData.total_classes.in_studio,
+        otLive: classData.total_classes.ot_live,
+        retrievedWorkouts: classData.performance_data.retrieved_workouts
+      });
+      setMemberInfo(memberData.data);
+      setStatus(classData.status);
+
+      if (classData.status === 'partial_success') {
         setError('Note: Some workout data could not be processed');
       }
     } catch (err) {
@@ -158,19 +137,50 @@ const Dashboard = ({ onLogout }) => {
   }, [onLogout]);
 
   useEffect(() => {
-    fetchData();
-    fetchMemberInfo();
-  }, [fetchData, fetchMemberInfo]);
+    fetchAllData();
+  }, [fetchAllData]);
+
+  const handleRefresh = () => {
+    fetchAllData();
+  };
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'workouts', label: 'Workouts' }
   ];
 
-  const handleRefresh = () => {
-    fetchData();
-    fetchMemberInfo();
-  };
+  // Loading and error states are now centralized
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent mb-4"></div>
+          <p className="text-slate-400">Loading your data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && status === 'error') {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="text-red-400 text-sm px-6 py-4 bg-red-900/20 rounded-xl inline-block border border-red-700/50">
+            <p className="mb-3">{error}</p>
+            <button
+              onClick={handleRefresh}
+              className="text-orange-400 hover:text-orange-300 underline focus:outline-none"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Only render main content when we have all data
+  if (!memberInfo || !classData) return null;
 
   return (
     <div className="min-h-screen bg-slate-900">
@@ -185,19 +195,21 @@ const Dashboard = ({ onLogout }) => {
               AFTERBURN
             </button>
             <div className="flex items-center gap-4">
-              {memberInfo && (
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-orange-500/10 to-amber-500/10 ring-1 ring-orange-500/20">
-                    <span className="text-xs font-medium text-orange-400/90">
-                      {`${memberInfo.first_name?.[0]}${memberInfo.last_name?.[0]}`}
-                    </span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-slate-300 leading-tight">{memberInfo.first_name}</span>
-                    <span className="text-xs text-slate-500 leading-tight">Member</span>
-                  </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-orange-500/10 to-amber-500/10 ring-1 ring-orange-500/20">
+                  <span className="text-xs font-medium text-orange-400/90">
+                    {`${memberInfo.first_name[0]}${memberInfo.last_name[0]}`}
+                  </span>
                 </div>
-              )}
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-slate-300 leading-tight">
+                    {memberInfo.first_name} {memberInfo.last_name}
+                  </span>
+                  <span className="text-xs text-slate-500 leading-tight">
+                    {memberInfo.studio_info.home_studio_name}
+                  </span>
+                </div>
+              </div>
               {/* Action buttons with consistent styling */}
               <div className="flex items-center gap-2">
                 <button
@@ -225,6 +237,26 @@ const Dashboard = ({ onLogout }) => {
 
       {/* Main content */}
       <div className="max-w-4xl mx-auto px-4 py-12">
+{/* Member Stats Section */}
+<div className="grid grid-cols-3 gap-4 mb-8">
+  <StatCard 
+    value={classData.total}
+    label="Total Classes"
+  />
+  
+  <StatCard 
+    value={`${memberInfo.workout_stats.attendance_rate}%`}
+    label="Attendance Rate"
+    tooltip="Shows how consistently you attend your scheduled workouts. Higher rates mean you're sticking to your fitness commitments."
+  />
+
+  <StatCard 
+    value={`${memberInfo.workout_stats.hrm_usage_rate}%`}
+    label="HRM Usage"
+    tooltip="Tracks how often you use your heart rate monitor in class. Using HRM helps optimize your workout intensity and earn splat points."
+  />
+</div>
+
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-3xl shadow-2xl overflow-hidden border border-slate-700/50">
           {/* Tabs */}
           <div className="flex border-b border-slate-700/50">
@@ -246,29 +278,17 @@ const Dashboard = ({ onLogout }) => {
           </div>
           
           <div className="p-6 sm:p-10">
-            {loading ? (
-              <div className="flex flex-col items-center justify-center h-40">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent mb-4"></div>
-                <p className="text-slate-400">Loading your data...</p>
-              </div>
-            ) : error && status === 'error' ? (
-              <div className="text-center space-y-4">
-                <div className="text-red-400 text-sm px-6 py-4 bg-red-900/20 rounded-xl inline-block border border-red-700/50">
-                  <p className="mb-3">{error}</p>
-                  <button
-                    onClick={handleRefresh}
-                    className="text-orange-400 hover:text-orange-300 underline focus:outline-none"
-                  >
-                    Try again
-                  </button>
-                </div>
-              </div>
+            {activeTab === 'overview' ? (
+              <OverviewTab 
+                classData={classData} 
+                error={error} 
+                status={status}
+                memberInfo={memberInfo}
+              />
             ) : (
-              activeTab === 'overview' ? (
-                <OverviewTab classData={classData} error={error} status={status} />
-              ) : (
-                <WorkoutsTab classData={classData} />
-              )
+              <WorkoutsTab 
+                classData={classData}
+              />
             )}
           </div>
         </div>
