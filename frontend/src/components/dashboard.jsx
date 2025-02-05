@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import StatCard from './stats/StatCard';
+import  WorkoutsTab from './tabs/WorkoutsTab';
 
 // Tab content components
 const OverviewTab = ({ classData, error, status, memberInfo }) => (
@@ -55,17 +56,6 @@ const OverviewTab = ({ classData, error, status, memberInfo }) => (
   </div>
 );
 
-const WorkoutsTab = ({ classData }) => (
-  <div className="space-y-6">
-    <div className="text-slate-300 text-sm px-4 py-3 bg-slate-800/50 rounded-lg">
-      Showing {classData.retrievedWorkouts} recent workouts out of {classData.total} total classes
-    </div>
-    <div className="text-center text-slate-400">
-      Workout history coming soon...
-    </div>
-  </div>
-);
-
 const Dashboard = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [classData, setClassData] = useState(null);
@@ -81,11 +71,10 @@ const Dashboard = ({ onLogout }) => {
       if (!token) {
         throw new Error('No authentication token found');
       }
-
+  
       setLoading(true);
       setError(null);
-
-      // Fetch both endpoints in parallel
+  
       const [classResponse, memberResponse] = await Promise.all([
         fetch('http://localhost:8000/api/total-classes', {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -94,47 +83,49 @@ const Dashboard = ({ onLogout }) => {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       ]);
-
-      // Handle authentication errors
+  
       if (classResponse.status === 401 || memberResponse.status === 401) {
         localStorage.removeItem('authToken');
         sessionStorage.removeItem('authToken');
         onLogout?.();
         throw new Error('Session expired. Please login again.');
       }
-
-      // Handle other errors
+  
       if (!classResponse.ok || !memberResponse.ok) {
         throw new Error('Failed to fetch data');
       }
-
-      // Parse both responses in parallel
+  
       const [classData, memberData] = await Promise.all([
         classResponse.json(),
         memberResponse.json()
       ]);
-
-      // Update all state at once
+  
+      console.log("Workout Data:", classData.performance_data.workouts); // Log full workout data
+  
       setClassData({
         total: classData.total_classes.total,
         inStudio: classData.total_classes.in_studio,
         otLive: classData.total_classes.ot_live,
-        retrievedWorkouts: classData.performance_data.retrieved_workouts
+        retrievedWorkouts: classData.performance_data.retrieved_workouts,
+        workouts: classData.performance_data.workouts // <-- NEW: Store workouts in state
       });
+  
       setMemberInfo(memberData.data);
       setStatus(classData.status);
-
+  
       if (classData.status === 'partial_success') {
         setError('Note: Some workout data could not be processed');
       }
     } catch (err) {
       setError(err.message);
       setStatus('error');
-      console.error('Error:', err);
+      console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
     }
   }, [onLogout]);
+  
+  
 
   useEffect(() => {
     fetchAllData();
@@ -259,23 +250,31 @@ const Dashboard = ({ onLogout }) => {
 
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-3xl shadow-2xl overflow-hidden border border-slate-700/50">
           {/* Tabs */}
-          <div className="flex border-b border-slate-700/50">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-8 py-4 text-sm font-medium relative focus:outline-none transition-colors
-                          ${activeTab === tab.id 
-                            ? 'text-orange-400 bg-slate-800/50 backdrop-blur-sm' 
-                            : 'text-slate-500 hover:text-slate-400'}`}
-              >
-                {tab.label}
-                {activeTab === tab.id && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500"></div>
-                )}
-              </button>
-            ))}
-          </div>
+<div className="flex border-b border-slate-700/50">
+  {tabs.map((tab) => (
+    <button
+      key={tab.id}
+      onClick={() => setActiveTab(tab.id)}
+      className={`px-8 py-4 text-sm font-medium relative transition-colors
+        ${activeTab === tab.id 
+          ? 'text-orange-400 bg-slate-800/50 backdrop-blur-sm' 
+          : 'text-slate-500 hover:text-slate-400'}
+      `}
+      style={{
+        outline: 'none',        // Removes default outline
+        boxShadow: 'none',      // Prevents focus glow effects
+        border: 'none'          // Ensures no border focus
+      }}
+      onMouseDown={(e) => e.preventDefault()} // Prevents focus on click
+    >
+      {tab.label}
+      {activeTab === tab.id && (
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-red-500 via-orange-500 to-amber-500"></div>
+      )}
+    </button>
+  ))}
+</div>
+
           
           <div className="p-6 sm:p-10">
             {activeTab === 'overview' ? (
