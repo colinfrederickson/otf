@@ -14,11 +14,8 @@ test('email validation on submit', () => {
     fireEvent.click(submitButton)
   })
 
-  // Debug: Check what is being rendered
-  console.log(queryByText('Email is required'))
-
   // Expect to see the email error message
-  expect(queryByText('Email is required')).toBeTruthy()
+  expect(queryByText('Email is required')).toBeInTheDocument()
 
   // Enter an invalid email
   act(() => {
@@ -27,7 +24,7 @@ test('email validation on submit', () => {
   })
 
   // Expect to see the invalid email error message
-  expect(queryByText('Please enter a valid email')).toBeTruthy()
+  expect(queryByText('Please enter a valid email')).toBeInTheDocument()
 })
 
 test('password validation on submit', () => {
@@ -44,9 +41,6 @@ test('password validation on submit', () => {
     fireEvent.click(submitButton)
   })
 
-  // Debug: Check what is being rendered
-  console.log(queryByText('Password is required'))
-
   // Expect to see the password error message
-  expect(queryByText('Password is required')).toBeTruthy()
+  expect(queryByText('Password is required')).toBeInTheDocument()
 })

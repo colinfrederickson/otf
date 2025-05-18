@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from api.core.config import settings, logger
 from otf_api import Otf
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
 
 async def get_otf_client(credentials):
     """Create and return an OTF client"""
