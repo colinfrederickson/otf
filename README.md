@@ -1,80 +1,101 @@
-# OrangeTheory Fitness Workout Data Analysis
+# OrangeTheory Fitness Analytics Tool
 
-A Python utility for retrieving and analyzing workout data from your OrangeTheory Fitness account.
+A comprehensive web application for analyzing and visualizing workout data from your OrangeTheory Fitness account.
 
 ## Features
 
-- Retrieves workout data from the OrangeTheory Fitness API.
-- Provides a comprehensive analysis of your workout history, focusing on the year 2024 (can be modified for other years).
-- Displays workout statistics, including:
-  - Total workouts and percentage of workouts attended.
-  - Breakdown of classes by type, coach, and location.
-  - Personal bests for maximum speed, distance, calories, and splat points.
-  - Average heart rate, time spent in each heart rate zone, and calorie burn.
-  - Detailed heart rate analysis by minute (with rounded values and thousands separators).
-- Generates a plot of average heart rate by minute.
+- **Secure Login**:
+
+  - Token-based authentication for secure access.
+  - User-specific data retrieval after login.
+
+- **Dashboard**:
+
+  - Overview of total class attendance.
+  - Detailed performance metrics, including:
+    - In-studio and OTF Live class breakdown.
+
+- **Data Retrieval and Analysis**:
+  - Advanced data retrieval from the OrangeTheory Fitness API.
+  - Comprehensive performance analytics:
+    - Workout frequency patterns.
+    - Studio-specific attendance trends.
+    - Performance trends over time.
+
+### API Features
+
+- `/api/login`: Authenticate users and issue tokens.
+- `/api/total-classes`: Retrieve class attendance and performance data.
+- Future endpoints to expand data visualization and user analytics.
 
 ## Prerequisites
 
-- Python 3.x
-- `requests` library
-- `matplotlib` library (for visualization)
+- Node.js and npm for running the web application.
+- A modern web browser for accessing the app.
 
 ## Installation
 
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/your-username/otf-workout-analysis.git
-
+   git clone https://github.com/your-username/otf-analytics.git
    ```
 
-2. Install the required dependencies:
-   pip3 install requests
+2. Install dependencies:
 
-3. Create a `config.ini` file in the project directory with the following content:
-   [OTF]
-   email = your-email@example.com
-   password = your-password
+   ```bash
+   npm install
+   ```
 
-Replace `your-email@example.com` with your OrangeTheory Fitness email and `your-password` with your account password.
+3. Create a `.env` file for configuration:
+
+   ```env
+   REACT_APP_API_URL=http://localhost:8000/api
+   ```
+
+4. Start the development server:
+
+   ```bash
+   npm start
+   ```
+
+5. Set up the backend by running the Python server (API):
+   - Install the required Python packages:
+     ```bash
+     pip install fastapi uvicorn pandas requests
+     ```
+   - Start the backend server:
+     ```bash
+     uvicorn api.main:app --reload
+     ```
 
 ## Usage
 
-To run the script, execute the following command in the project directory:
-python3 main.py
+1. Open the web app in your browser (default: `http://localhost:3000`).
+2. Log in using your OrangeTheory Fitness credentials.
+3. Access the dashboard to view:
+   - Total class attendance.
+   - Performance metrics and trends.
 
-The script will retrieve your workout data from the OrangeTheory Fitness API and provide a detailed analysis of your workout history for the year 2024.
+## Analysis Features
 
-## Output
+### Dashboard Overview
 
-The script will display the following information:
+- Total classes attended.
+- Breakdown of in-studio vs. OTF Live classes.
 
-- Total workouts and percentage of workouts attended in 2024.
-- Breakdown of classes by type, coach, and location.
-- Personal bests for maximum speed, distance, calories, and splat points.
-- Average heart rate, time spent in each heart rate zone, and calorie burn.
-- Detailed heart rate analysis by minute.
-- A plot of average heart rate by minute (if heart rate data is available).
+## Future Development
 
-## Limitations
-
-- The script currently focuses on workout data for the year 2024. Modify the code to analyze data for different years if needed.
-- The accuracy and completeness of the analysis depend on the availability and reliability of the OrangeTheory Fitness API data.
-- Some assumptions are made about the structure and availability of the data. If you encounter any errors or missing data, please create an issue on GitHub or reach out for assistance.
-
-## Future Enhancements
-
-- Create a Postman collection to better explore the OrangeTheory Fitness API and make it more easily accessible.
-- Identify and handle data assumptions and errors arising from them.
-- Retrieve and analyze challenge/benchmark data and progression.
-- Utilize the pandas library for enhanced data processing and analysis.
-- Generate visualizations and graphs to better represent the workout data.
+- Integration of workout visualizations.
+- Enhanced performance trend analysis.
+- Benchmark and personal records tracking.
+- User-specific goal setting and tracking.
+- Mobile-friendly responsive design.
 
 ## Contributing
 
-Contributions are welcome! If you have any suggestions, bug reports, or feature requests, please create an issue on the GitHub repository.
+Contributions are welcome! Please feel free to submit pull requests or create issues for bugs and feature requests.
 
 ## Contact
 
-For any questions or inquiries, please contact the project maintainer at cfrederickson5@gmail.com.
+Project maintainer: [cfrederickson5@gmail.com](mailto:cfrederickson5@gmail.com)
