@@ -46,3 +46,30 @@ class MemberDetail(BaseModel):
 class MemberDetailResponse(BaseModel):
     status: str
     data: MemberDetail
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "success",
+                "data": {
+                    "first_name": "Jane",
+                    "last_name": "Doe",
+                    "email": "jane@example.com",
+                    "max_hr": 195,
+                    "workout_stats": {
+                        "total_classes_booked": 10,
+                        "total_classes_attended": 9,
+                        "total_classes_with_hrm": 8,
+                        "attendance_rate": 90.0,
+                        "hrm_usage_rate": 88.9,
+                        "first_class_date": "2023-01-01T00:00:00",
+                        "last_class_date": "2023-06-30T00:00:00"
+                    },
+                    "studio_info": {
+                        "home_studio_name": "Downtown",
+                        "total_studios_visited": 3,
+                        "time_zone": "UTC"
+                    }
+                }
+            }
+        }
