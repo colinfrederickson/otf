@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import StatCard from './stats/StatCard';
 import  WorkoutsTab from './tabs/WorkoutsTab';
+import TrendsTab from "./tabs/TrendsTab";
 
 // Tab content components
 const OverviewTab = ({ classData, error, status, memberInfo }) => (
@@ -137,7 +138,8 @@ const Dashboard = ({ onLogout }) => {
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
-    { id: 'workouts', label: 'Workouts' }
+    { id: 'workouts', label: 'Workouts' },
+    { id: 'trends', label: 'Trends' }
   ];
 
   // Loading and error states are now centralized
@@ -251,7 +253,7 @@ const Dashboard = ({ onLogout }) => {
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-3xl shadow-2xl overflow-hidden border border-slate-700/50">
           {/* Tabs */}
 <div className="flex border-b border-slate-700/50">
-  {tabs.map((tab) => (
+{tabs.map((tab) => (
     <button
       key={tab.id}
       onClick={() => setActiveTab(tab.id)}
@@ -261,9 +263,9 @@ const Dashboard = ({ onLogout }) => {
           : 'text-slate-500 hover:text-slate-400'}
       `}
       style={{
-        outline: 'none',        // Removes default outline
-        boxShadow: 'none',      // Prevents focus glow effects
-        border: 'none'          // Ensures no border focus
+        outline: 'none',        
+        boxShadow: 'none',      
+        border: 'none'          
       }}
       onMouseDown={(e) => e.preventDefault()} // Prevents focus on click
     >
@@ -276,20 +278,22 @@ const Dashboard = ({ onLogout }) => {
 </div>
 
           
-          <div className="p-6 sm:p-10">
-            {activeTab === 'overview' ? (
-              <OverviewTab 
-                classData={classData} 
-                error={error} 
-                status={status}
-                memberInfo={memberInfo}
-              />
-            ) : (
-              <WorkoutsTab 
-                classData={classData}
-              />
-            )}
-          </div>
+<div className="p-6 sm:p-10">
+  {activeTab === 'overview' && (
+    <OverviewTab 
+      classData={classData} 
+      error={error} 
+      status={status}
+      memberInfo={memberInfo}
+    />
+  )}
+  {activeTab === 'workouts' && (
+    <WorkoutsTab classData={classData} />
+  )}
+{activeTab === 'trends' && classData?.workouts?.length > 0 && (
+  <TrendsTab workoutData={classData.workouts} />
+)}
+</div>
         </div>
       </div>
     </div>
