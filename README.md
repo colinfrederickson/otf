@@ -50,7 +50,7 @@ A comprehensive web application for analyzing and visualizing workout data from 
 3. Create a `.env` file for configuration:
 
    ```env
-   REACT_APP_API_URL=http://localhost:5000/api
+   REACT_APP_API_URL=http://localhost:8000/api
    ```
 
 4. Start the development server:
@@ -66,7 +66,7 @@ A comprehensive web application for analyzing and visualizing workout data from 
      ```
    - Start the backend server:
      ```bash
-     uvicorn api:app --reload
+     uvicorn api.main:app --reload
      ```
 
 ## Usage
